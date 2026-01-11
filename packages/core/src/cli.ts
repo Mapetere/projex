@@ -14,10 +14,12 @@ import { homedir } from 'os';
 import { EventBus, getEventBus } from './events/event-bus.js';
 import { GitHubPoller } from './ingestion/github-poller.js';
 import { ProjectStore } from './storage/project-store.js';
+import { ChangeHistory } from './storage/history.js';
 import { ProjectDetector } from './inference/project-detector.js';
 import { Enricher } from './inference/enricher.js';
 import { LifecycleTracker } from './inference/lifecycle-tracker.js';
 import { PortfolioGenerator } from './inference/portfolio-generator.js';
+import { RepoClassifier } from './inference/classifier.js';
 import { DesignAnalyzer } from './integrations/analyzer.js';
 import { TemplateGenerator } from './integrations/template-generator.js';
 import { createInjector } from './integrations/injectors.js';
@@ -31,7 +33,7 @@ const program = new Command();
 program
     .name('projex')
     .description('Automatically infer projects from GitHub and generate portfolio entries')
-    .version('0.2.0');
+    .version('0.3.0');
 
 // ============================================================================
 // Setup command
@@ -193,74 +195,141 @@ program
     });
 
 // ============================================================================
-// Approve command
+// Approve command (with optional interactive mode)
 // ============================================================================
 program
-    .command('approve <projectId>')
-    .description('Approve a portfolio draft and inject into portfolio')
-    .action(async (projectId: string) => {
+    .command('approve [projectId]')
+    .description('Approve portfolio drafts (interactive if no ID given)')
+    .option('-a, --all', 'Approve all pending drafts')
+    .action(async (projectId: string | undefined, options: { all?: boolean }) => {
         const config = loadConfig();
         if (!config) return;
 
-        const spinner = ora('Loading project...').start();
+        const store = new ProjectStore(config);
+        const portfolioPath = (config as any).portfolio?.path;
 
-        try {
-            const store = new ProjectStore(config);
-            const project = store.getProject(projectId);
-
-            if (!project) {
-                spinner.fail(`Project not found: ${projectId}`);
-                return;
-            }
-
-            if (!project.portfolioDraft) {
-                spinner.fail('This project has no draft to approve');
-                return;
-            }
-
-            // Analyze portfolio
-            spinner.text = 'Analyzing portfolio design...';
-            const portfolioPath = (config as any).portfolio?.path;
-
-            if (!portfolioPath) {
-                spinner.fail('No portfolio path configured. Run `projex setup` first.');
-                return;
-            }
-
-            const analyzer = new DesignAnalyzer(portfolioPath);
-            const analysis = await analyzer.analyze();
-
-            // Generate card
-            spinner.text = 'Generating project card...';
-            const generator = new TemplateGenerator(analysis);
-            const card = generator.generate(project);
-
-            // Inject into portfolio
-            spinner.text = 'Injecting into portfolio...';
-            const injector = createInjector(portfolioPath, analysis, {
-                autoCommit: (config as any).portfolio?.autoCommit ?? false,
-                createBackup: true,
-            });
-            const result = await injector.inject(card, projectId);
-
-            if (result.success) {
-                // Mark as approved
-                const portfolioGenerator = new PortfolioGenerator(store);
-                portfolioGenerator.approveDraft(projectId);
-
-                spinner.succeed('Project approved and added to portfolio!');
-                console.log(chalk.dim(`  File: ${result.file}`));
-                if (result.backup) {
-                    console.log(chalk.dim(`  Backup: ${result.backup}`));
-                }
-            } else {
-                spinner.fail(`Injection failed: ${result.message}`);
-            }
-        } catch (error) {
-            spinner.fail('Approval failed');
-            console.error(chalk.red(error));
+        if (!portfolioPath) {
+            console.log(chalk.red('No portfolio path configured. Run `projex setup` first.'));
+            return;
         }
+
+        // Interactive mode if no project ID given
+        if (!projectId && !options.all) {
+            const drafts = store.getProjectsNeedingReview();
+
+            if (drafts.length === 0) {
+                console.log(chalk.dim('\nNo drafts pending review.\n'));
+                return;
+            }
+
+            const { selected } = await inquirer.prompt([
+                {
+                    type: 'checkbox',
+                    name: 'selected',
+                    message: 'Select projects to approve:',
+                    choices: drafts.map(p => ({
+                        name: `${p.displayName} (${p.techStack.slice(0, 3).map((t: any) => t.name).join(', ')})`,
+                        value: p.id,
+                        checked: false,
+                    })),
+                },
+            ]);
+
+            if (selected.length === 0) {
+                console.log(chalk.dim('\nNo projects selected.\n'));
+                return;
+            }
+
+            for (const id of selected) {
+                await approveProject(id, config, store, portfolioPath);
+            }
+            return;
+        }
+
+        // Approve all mode
+        if (options.all) {
+            const drafts = store.getProjectsNeedingReview();
+            console.log(chalk.cyan(`\nApproving ${drafts.length} drafts...\n`));
+
+            for (const draft of drafts) {
+                await approveProject(draft.id, config, store, portfolioPath);
+            }
+            return;
+        }
+
+        // Single project mode
+        await approveProject(projectId!, config, store, portfolioPath);
     });
+
+async function approveProject(projectId: string, config: Config, store: ProjectStore, portfolioPath: string) {
+    const spinner = ora(`Approving ${projectId}...`).start();
+    const history = new ChangeHistory();
+
+    try {
+        const project = store.getProject(projectId);
+
+        if (!project) {
+            spinner.fail(`Project not found: ${projectId}`);
+            return;
+        }
+
+        if (!project.portfolioDraft) {
+            spinner.fail(`No draft for: ${projectId}`);
+            return;
+        }
+
+        // Analyze portfolio
+        spinner.text = 'Analyzing portfolio...';
+        const analyzer = new DesignAnalyzer(portfolioPath);
+        const analysis = await analyzer.analyze();
+
+        // Generate card
+        spinner.text = 'Generating card...';
+        const generator = new TemplateGenerator(analysis);
+        const card = generator.generate(project);
+
+        // Inject into portfolio
+        spinner.text = 'Injecting...';
+        const injector = createInjector(portfolioPath, analysis, {
+            autoCommit: (config as any).portfolio?.autoCommit ?? false,
+            createBackup: true,
+        });
+
+        // Read file content before injection for history
+        const targetFile = analysis.projectsFile || join(portfolioPath, 'index.html');
+        let contentBefore = '';
+        if (existsSync(targetFile)) {
+            contentBefore = readFileSync(targetFile, 'utf-8');
+        }
+
+        const result = await injector.inject(card, projectId);
+
+        if (result.success) {
+            // Read file content after injection
+            const contentAfter = existsSync(result.file!) ? readFileSync(result.file!, 'utf-8') : '';
+
+            // Record the change in history
+            history.recordChange({
+                projectId,
+                projectName: project.displayName,
+                action: 'ADD',
+                file: result.file!,
+                contentBefore,
+                contentAfter,
+                backupPath: result.backup,
+            });
+
+            const portfolioGenerator = new PortfolioGenerator(store);
+            portfolioGenerator.approveDraft(projectId);
+            spinner.succeed(`✓ ${project.displayName}`);
+        } else {
+            spinner.fail(`✗ ${project.displayName}: ${result.message}`);
+        }
+    } catch (error) {
+        spinner.fail(`✗ ${projectId}: ${error}`);
+    }
+}
+
 
 // ============================================================================
 // List command
@@ -362,5 +431,115 @@ function getStatusIcon(status: string): string {
     };
     return icons[status] || '❓';
 }
+
+function getClassificationIcon(classification: string): string {
+    const icons: Record<string, string> = {
+        PROJECT: '✅',
+        NOTES: '📚',
+        FORK: '🍴',
+        EXPERIMENT: '🧪',
+        CONFIG: '⚙️',
+        TEMPLATE: '📋',
+        ARCHIVED_JUNK: '🗑️',
+        UNKNOWN: '❓',
+    };
+    return icons[classification] || '❓';
+}
+
+// ============================================================================
+// Classify command
+// ============================================================================
+program
+    .command('classify')
+    .description('Classify all projects (project, notes, fork, experiment, etc.)')
+    .action(async () => {
+        const config = loadConfig();
+        if (!config) return;
+
+        const store = new ProjectStore(config);
+        const classifier = new RepoClassifier();
+        const projects = store.getAllProjects();
+
+        console.log(chalk.cyan.bold(`\n🔍 Classifying ${projects.length} repositories...\n`));
+
+        const groups: Record<string, typeof projects> = {};
+
+        for (const project of projects) {
+            const result = classifier.classify(project);
+            if (!groups[result.classification]) {
+                groups[result.classification] = [];
+            }
+            groups[result.classification].push(project);
+        }
+
+        for (const [classification, group] of Object.entries(groups)) {
+            const icon = getClassificationIcon(classification);
+            console.log(chalk.bold(`${icon} ${classification} (${group.length})`));
+            for (const p of group) {
+                const worthy = classifier.classify(p).isPortfolioWorthy;
+                const suffix = worthy ? chalk.green(' ← portfolio worthy') : '';
+                console.log(chalk.dim(`  - ${p.displayName}${suffix}`));
+            }
+            console.log('');
+        }
+
+        const portfolioWorthy = projects.filter(p => classifier.classify(p).isPortfolioWorthy);
+        console.log(chalk.green(`\n✨ ${portfolioWorthy.length} projects are portfolio-worthy.\n`));
+    });
+
+// ============================================================================
+// History command
+// ============================================================================
+program
+    .command('history')
+    .description('View recent portfolio changes')
+    .option('-n, --count <number>', 'Number of changes to show', '10')
+    .action(async (options) => {
+        const history = new ChangeHistory();
+        const changes = history.getRecentChanges(parseInt(options.count));
+
+        if (changes.length === 0) {
+            console.log(chalk.dim('\nNo changes recorded yet.\n'));
+            return;
+        }
+
+        console.log(chalk.cyan.bold(`\n📜 Recent Changes (${changes.length})\n`));
+
+        for (const change of changes) {
+            const icon = change.action === 'ADD' ? chalk.green('+') : chalk.red('-');
+            const date = new Date(change.timestamp).toLocaleDateString();
+            console.log(`${icon} ${chalk.bold(change.projectName)}`);
+            console.log(chalk.dim(`    ${date} • ${change.file}`));
+            console.log(chalk.dim(`    ID: ${change.id}\n`));
+        }
+
+        console.log(chalk.dim('Use `projex undo` to revert the last change.\n'));
+    });
+
+// ============================================================================
+// Undo command
+// ============================================================================
+program
+    .command('undo')
+    .description('Undo the last portfolio change')
+    .option('-i, --id <changeId>', 'Undo a specific change by ID')
+    .action(async (options) => {
+        const history = new ChangeHistory();
+
+        const spinner = ora('Undoing change...').start();
+
+        let result;
+        if (options.id) {
+            result = history.undoChange(options.id);
+        } else {
+            result = history.undoLast();
+        }
+
+        if (result.success) {
+            spinner.succeed(result.message);
+        } else {
+            spinner.fail(result.message);
+        }
+    });
 
 program.parse();
