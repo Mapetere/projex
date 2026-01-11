@@ -1,28 +1,19 @@
 {
-  "name": "nodal-asteroid",
-  "version": "0.1.0",
-  "description": "Event-driven portfolio inference system - detects projects from GitHub activity",
-  "type": "module",
-  "main": "dist/index.js",
+  "name": "projex",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Event-driven portfolio inference system with UI",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "tsc",
-    "start": "node dist/index.js",
-    "dev": "tsx src/index.ts",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "dev": "npm run dev -w @projex/app",
+    "build": "npm run build -w @projex/core && npm run build -w @projex/app",
+    "tauri": "npm run tauri -w @projex/app",
+    "test": "npm run test -w @projex/core"
   },
-  "keywords": ["portfolio", "github", "automation", "inference"],
-  "author": "",
-  "license": "MIT",
   "devDependencies": {
-    "@types/node": "^20.10.0",
-    "tsx": "^4.7.0",
-    "typescript": "^5.3.0",
-    "vitest": "^1.2.0"
-  },
-  "dependencies": {
-    "@octokit/rest": "^20.0.0",
-    "zod": "^3.22.0"
+    "typescript": "^5.3.0"
   },
   "engines": {
     "node": ">=18.0.0"
