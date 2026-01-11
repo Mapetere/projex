@@ -18,6 +18,7 @@ export interface InjectionResult {
 
 export interface InjectorOptions {
     autoCommit: boolean;
+    autoPush: boolean;
     commitMessage?: string;
     createBackup: boolean;
 }
@@ -56,8 +57,14 @@ abstract class BaseInjector {
             }
             execSync(`git commit -m "${message}"`, { cwd: this.portfolioPath });
             console.log(`[Injector] Committed: ${message}`);
+
+            // Auto-push if enabled
+            if (this.options.autoPush) {
+                execSync('git push', { cwd: this.portfolioPath });
+                console.log('[Injector] Pushed to remote');
+            }
         } catch (error) {
-            console.error('[Injector] Git commit failed:', error);
+            console.error('[Injector] Git operation failed:', error);
         }
     }
 }
@@ -83,20 +90,35 @@ export class HTMLInjector extends BaseInjector {
         try {
             let content = readFileSync(filePath, 'utf-8');
 
-            // Find the projects container
-            const selector = this.analysis.projectSelector || '.projects';
-            const containerPattern = this.findContainerPattern(content, selector);
-
-            if (!containerPattern) {
+            // Check if this project is already injected
+            if (content.includes(`projex:${projectId}`)) {
                 return {
                     success: false,
                     file: targetFile,
-                    message: `Could not find container matching "${selector}"`,
+                    message: `Project ${projectId} is already in the portfolio`,
+                    backup,
                 };
             }
 
-            // Insert the new card
-            content = this.insertCard(content, containerPattern, card.html, projectId);
+            // Find the best insertion point
+            const insertionPoint = this.findInsertionPoint(content);
+
+            if (!insertionPoint) {
+                return {
+                    success: false,
+                    file: targetFile,
+                    message: 'Could not find a suitable insertion point in the HTML',
+                };
+            }
+
+            // Create the wrapped card HTML
+            const wrappedCard = this.wrapCard(card.html, projectId, insertionPoint.indent);
+
+            // Insert the card at the found position
+            content =
+                content.slice(0, insertionPoint.position) +
+                wrappedCard +
+                content.slice(insertionPoint.position);
 
             writeFileSync(filePath, content);
 
@@ -105,7 +127,7 @@ export class HTMLInjector extends BaseInjector {
 
             return {
                 success: true,
-                file: targetFile,
+                file: filePath,
                 message: 'Project card injected successfully',
                 backup,
             };
@@ -135,71 +157,126 @@ export class HTMLInjector extends BaseInjector {
         return candidates.find(f => existsSync(join(this.portfolioPath, f))) || null;
     }
 
-    private findContainerPattern(content: string, selector: string): { start: number; end: number } | null {
-        const className = selector.replace('.', '').replace('#', '');
-
-        // Find opening tag with the class/id
-        const patterns = [
-            new RegExp(`<(div|section|main)[^>]*(?:class|id)=["'][^"']*${className}[^"']*["'][^>]*>`, 'i'),
-            new RegExp(`<(div|section|main)[^>]*(?:class|id)="${className}"[^>]*>`, 'i'),
+    private findInsertionPoint(content: string): { position: number; indent: string } | null {
+        // Strategy 1: Find projects-grid and insert before its closing div
+        const gridPatterns = [
+            /(<div[^>]*class="[^"]*projects-grid[^"]*"[^>]*>)/gi,
+            /(<div[^>]*class="[^"]*project-cards[^"]*"[^>]*>)/gi,
+            /(<div[^>]*class="[^"]*projects-container[^"]*"[^>]*>)/gi,
         ];
 
-        for (const pattern of patterns) {
-            const match = content.match(pattern);
+        for (const pattern of gridPatterns) {
+            const match = pattern.exec(content);
             if (match && match.index !== undefined) {
-                const start = match.index + match[0].length;
-                // Find the closing tag
-                const tagName = match[1];
-                const closePattern = new RegExp(`</${tagName}>`, 'gi');
-                let depth = 1;
-                let pos = start;
-
-                while (depth > 0 && pos < content.length) {
-                    const openMatch = content.slice(pos).match(new RegExp(`<${tagName}[^>]*>`, 'i'));
-                    const closeMatch = content.slice(pos).match(closePattern);
-
-                    if (!closeMatch) break;
-
-                    const openPos = openMatch ? openMatch.index! : Infinity;
-                    const closePos = closeMatch.index!;
-
-                    if (openPos < closePos) {
-                        depth++;
-                        pos += openPos + openMatch![0].length;
-                    } else {
-                        depth--;
-                        if (depth === 0) {
-                            return { start, end: pos + closePos };
-                        }
-                        pos += closePos + closeMatch[0].length;
-                    }
+                // Find the closing </div> for this grid
+                const startPos = match.index + match[0].length;
+                const closingPos = this.findMatchingClosingTag(content, startPos, 'div');
+                if (closingPos > 0) {
+                    const indent = this.detectIndent(content, match.index);
+                    return { position: closingPos, indent: indent + '    ' };
                 }
             }
+        }
+
+        // Strategy 2: Find the projects section and insert before closing </section>
+        const sectionPattern = /<section[^>]*id="projects"[^>]*>/gi;
+        const sectionMatch = sectionPattern.exec(content);
+        if (sectionMatch && sectionMatch.index !== undefined) {
+            const startPos = sectionMatch.index + sectionMatch[0].length;
+            const closingPos = this.findMatchingClosingTag(content, startPos, 'section');
+            if (closingPos > 0) {
+                const indent = this.detectIndent(content, sectionMatch.index);
+                return { position: closingPos, indent: indent + '        ' };
+            }
+        }
+
+        // Strategy 3: Find any element with "project" in class and insert after last project-card
+        const cardPattern = /<div[^>]*class="[^"]*project-card[^"]*"[^>]*>/gi;
+        let lastCardMatch: RegExpExecArray | null = null;
+        let match;
+        while ((match = cardPattern.exec(content)) !== null) {
+            lastCardMatch = match;
+        }
+
+        if (lastCardMatch && lastCardMatch.index !== undefined) {
+            // Find the closing </div> for this card
+            const startPos = lastCardMatch.index + lastCardMatch[0].length;
+            const closingPos = this.findMatchingClosingTag(content, startPos, 'div');
+            if (closingPos > 0) {
+                const afterClosing = closingPos + '</div>'.length;
+                const indent = this.detectIndent(content, lastCardMatch.index);
+                return { position: afterClosing, indent };
+            }
+        }
+
+        // Strategy 4: Find <!-- More Projects --> or similar comment
+        const commentPattern = /<!--\s*(?:More Projects|Projects Grid|Project Cards)\s*-->/gi;
+        const commentMatch = commentPattern.exec(content);
+        if (commentMatch && commentMatch.index !== undefined) {
+            const indent = this.detectIndent(content, commentMatch.index);
+            return { position: commentMatch.index + commentMatch[0].length, indent };
         }
 
         return null;
     }
 
-    private insertCard(content: string, container: { start: number; end: number }, cardHtml: string, projectId: string): string {
-        const indent = this.detectIndent(content, container.start);
-        const indentedCard = cardHtml
-            .split('\n')
-            .map((line, i) => i === 0 ? line : indent + line)
+    private findMatchingClosingTag(content: string, startPos: number, tagName: string): number {
+        let depth = 1;
+        let pos = startPos;
+        const openPattern = new RegExp(`<${tagName}[^>]*>`, 'gi');
+        const closePattern = new RegExp(`</${tagName}>`, 'gi');
+
+        while (depth > 0 && pos < content.length) {
+            openPattern.lastIndex = pos;
+            closePattern.lastIndex = pos;
+
+            const openMatch = openPattern.exec(content);
+            const closeMatch = closePattern.exec(content);
+
+            if (!closeMatch) {
+                return -1; // No closing tag found
+            }
+
+            const openPos = openMatch ? openMatch.index : Infinity;
+            const closePos = closeMatch.index;
+
+            if (openPos < closePos) {
+                depth++;
+                pos = openPos + openMatch![0].length;
+            } else {
+                depth--;
+                if (depth === 0) {
+                    return closePos;
+                }
+                pos = closePos + closeMatch[0].length;
+            }
+        }
+
+        return -1;
+    }
+
+    private wrapCard(cardHtml: string, projectId: string, indent: string): string {
+        const lines = cardHtml.split('\n');
+        const indentedCard = lines
+            .map((line, i) => i === 0 ? indent + line : indent + line)
             .join('\n');
 
-        // Insert before the closing tag
-        const before = content.slice(0, container.end);
-        const after = content.slice(container.end);
-
-        return `${before}\n${indent}<!-- projex:${projectId} -->\n${indent}${indentedCard}\n${indent}<!-- /projex:${projectId} -->\n${after}`;
+        return `\n${indent}<!-- projex:${projectId} -->\n${indentedCard}\n${indent}<!-- /projex:${projectId} -->\n`;
     }
 
     private detectIndent(content: string, position: number): string {
-        const lineStart = content.lastIndexOf('\n', position) + 1;
+        // Find the start of the line
+        let lineStart = position;
+        while (lineStart > 0 && content[lineStart - 1] !== '\n') {
+            lineStart--;
+        }
+
+        // Get the whitespace at the start of this line
         const match = content.slice(lineStart, position).match(/^(\s*)/);
-        return match ? match[1] + '  ' : '  ';
+        return match ? match[1] : '            ';
     }
 }
+
 
 /**
  * Markdown Portfolio Injector

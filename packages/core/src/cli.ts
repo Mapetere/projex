@@ -33,7 +33,7 @@ const program = new Command();
 program
     .name('projex')
     .description('Automatically infer projects from GitHub and generate portfolio entries')
-    .version('0.4.1');
+    .version('0.5.0');
 
 // ============================================================================
 // Setup command
@@ -70,6 +70,13 @@ program
                 default: false,
             },
             {
+                type: 'confirm',
+                name: 'autoPush',
+                message: 'Auto-push to GitHub after commit?',
+                default: false,
+                when: (answers: any) => answers.autoCommit,
+            },
+            {
                 type: 'number',
                 name: 'pollingInterval',
                 message: 'Polling interval (minutes):',
@@ -102,6 +109,7 @@ program
             portfolio: {
                 path: answers.portfolioPath,
                 autoCommit: answers.autoCommit,
+                autoPush: answers.autoPush || false,
             },
         };
 
@@ -292,6 +300,7 @@ async function approveProject(projectId: string, config: Config, store: ProjectS
         spinner.text = 'Injecting...';
         const injector = createInjector(portfolioPath, analysis, {
             autoCommit: (config as any).portfolio?.autoCommit ?? false,
+            autoPush: (config as any).portfolio?.autoPush ?? false,
             createBackup: true,
         });
 
