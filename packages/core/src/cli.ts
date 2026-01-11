@@ -33,7 +33,7 @@ const program = new Command();
 program
     .name('projex')
     .description('Automatically infer projects from GitHub and generate portfolio entries')
-    .version('0.3.0');
+    .version('0.4.1');
 
 // ============================================================================
 // Setup command
