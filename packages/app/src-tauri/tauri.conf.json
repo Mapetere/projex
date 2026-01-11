@@ -1,0 +1,53 @@
+{
+    "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/core/tauri-config-schema/schema.json",
+    "productName": "Projex",
+    "version": "0.2.0",
+    "identifier": "com.projex.app",
+    "build": {
+        "beforeBuildCommand": "npm run build",
+        "beforeDevCommand": "npm run dev",
+        "frontendDist": "../dist",
+        "devUrl": "http://localhost:1420"
+    },
+    "app": {
+        "windows": [
+            {
+                "title": "Projex",
+                "width": 1000,
+                "height": 700,
+                "minWidth": 800,
+                "minHeight": 600,
+                "resizable": true,
+                "center": true
+            }
+        ],
+        "trayIcon": {
+            "iconPath": "icons/icon.png",
+            "iconAsTemplate": true
+        },
+        "security": {
+            "csp": null
+        }
+    },
+    "bundle": {
+        "active": true,
+        "icon": [
+            "icons/32x32.png",
+            "icons/128x128.png",
+            "icons/128x128@2x.png",
+            "icons/icon.icns",
+            "icons/icon.ico"
+        ],
+        "targets": "all"
+    },
+    "plugins": {
+        "dialog": {
+            "open": true
+        },
+        "fs": {
+            "scope": [
+                "**"
+            ]
+        }
+    }
+}
