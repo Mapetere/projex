@@ -1,68 +1,87 @@
-# Nodal Asteroid
+# Projex
 
-An event-driven system that automatically infers software project lifecycle from GitHub activity and generates draft portfolio entries.
+> Automatically infer projects from GitHub activity and generate portfolio entries.
 
-## Features
+[![npm version](https://img.shields.io/npm/v/projex.svg)](https://www.npmjs.com/package/projex)
 
-- **Signal Ingestion**: Polls GitHub for repository changes (creates, pushes, archives)
-- **Tech Stack Detection**: Analyzes languages, package files, and READMEs to identify frameworks and tools
-- **Purpose Extraction**: Extracts project descriptions from READMEs and repository metadata
-- **Completion Detection**: Identifies likely completed projects based on 90-day inactivity threshold
-- **Portfolio Generation**: Creates draft portfolio entries for review and approval
+## Installation
+
+```bash
+# Install globally
+npm install -g projex
+
+# Or use npx
+npx projex setup
+```
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-npm install
+# 1. Run the setup wizard
+projex setup
 
-# Set required environment variables
-export GITHUB_TOKEN="your-github-token"
-export GITHUB_USERNAME="your-username"
+# 2. Scan your GitHub for projects
+projex scan
 
-# Run a single poll cycle
-npm run dev -- poll
+# 3. Review pending portfolio drafts
+projex drafts
 
-# List detected projects
-npm run dev -- list
-
-# List pending portfolio drafts
-npm run dev -- drafts
-
-# Start continuous polling (60 min interval)
-npm run dev -- start
+# 4. Approve and inject into your portfolio
+projex approve github:username/repo-name
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `poll` | Run a single poll cycle |
-| `start` | Start continuous polling |
-| `list` | List all detected projects |
-| `drafts` | List portfolio drafts pending review |
-| `approve <id>` | Approve a portfolio draft |
-| `export` | Export approved portfolios as JSON |
+| `projex setup` | Interactive setup wizard |
+| `projex scan` | Scan GitHub for projects |
+| `projex list` | List all detected projects |
+| `projex drafts` | Show pending portfolio drafts |
+| `projex approve <id>` | Approve draft and inject into portfolio |
+| `projex export` | Export approved entries as JSON |
+
+## How It Works
+
+1. **Signal Ingestion** — Polls GitHub for repository activity
+2. **Inference Engine** — Detects tech stack, purpose, and completion status
+3. **Portfolio Integration** — Analyzes your existing portfolio design and generates matching project cards
+
+```
+GitHub Activity → Event Bus → Inference → Portfolio Draft → Your Portfolio
+```
+
+## Supported Portfolio Types
+
+- **HTML/CSS** — Injects into index.html, projects.html
+- **Markdown** — Appends to README.md, projects.md (Jekyll, Hugo)
+- **React/Next.js** — Updates src/data/projects.ts
 
 ## Configuration
 
-Configure via environment variables:
+Config is stored at `~/.projex/config.json`:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GITHUB_TOKEN` | (required) | GitHub personal access token |
-| `GITHUB_USERNAME` | (required) | Your GitHub username |
-| `POLLING_INTERVAL_MINUTES` | 60 | How often to poll GitHub |
-| `COMPLETION_THRESHOLD_DAYS` | 90 | Days of inactivity to mark as completed |
-| `DATA_DIR` | `./data` | Where to store project data |
-
-## Architecture
-
+```json
+{
+  "github": {
+    "token": "ghp_xxx",
+    "username": "your-username",
+    "pollingIntervalMinutes": 60
+  },
+  "portfolio": {
+    "path": "/path/to/portfolio",
+    "autoCommit": false
+  }
+}
 ```
-Signal Ingestion → Event Bus → Inference Engine → Portfolio Generator
-     ↓                              ↓
- GitHub API             ProjectDetector, Enricher,
-                        LifecycleTracker
+
+## Desktop App
+
+For a GUI experience with system tray, see [packages/app](./packages/app).
+
+```bash
+# Build the Tauri app (requires Rust)
+npm run tauri build
 ```
 
 ## License
