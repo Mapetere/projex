@@ -1,5 +1,5 @@
 {
-    "name": "projex",
+    "name": "projex-cli",
     "version": "0.2.0",
     "description": "Automatically infer projects from GitHub and generate portfolio entries",
     "type": "module",
