@@ -2,16 +2,16 @@
 
 > Automatically infer projects from GitHub activity and generate portfolio entries.
 
-[![npm version](https://img.shields.io/npm/v/projex.svg)](https://www.npmjs.com/package/projex)
+[![npm version](https://img.shields.io/npm/v/projex-cli.svg)](https://www.npmjs.com/package/projex-cli)
 
 ## Installation
 
 ```bash
 # Install globally
-npm install -g projex
+npm install -g projex-cli
 
 # Or use npx
-npx projex setup
+npx projex-cli setup
 ```
 
 ## Quick Start
