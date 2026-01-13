@@ -1,8 +1,8 @@
 {
-    "name": "@projex/app",
+    "name": "@projex-legacy/app",
     "version": "0.2.0",
     "private": true,
-    "description": "Projex desktop app with Tauri",
+    "description": "Projex Legacy desktop app with Tauri",
     "type": "module",
     "scripts": {
         "dev": "vite",

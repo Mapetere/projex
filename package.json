@@ -1,5 +1,5 @@
 {
-  "name": "projex",
+  "name": "projex-legacy",
   "version": "0.2.0",
   "private": true,
   "description": "Event-driven portfolio inference system with UI",

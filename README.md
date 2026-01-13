@@ -1,45 +1,45 @@
-# Projex
+# Projex Legacy
 
 > Automatically infer projects from GitHub activity and generate portfolio entries.
 
-[![npm version](https://img.shields.io/npm/v/projex-cli.svg)](https://www.npmjs.com/package/projex-cli)
+[![npm version](https://img.shields.io/npm/v/projex-legacy-cli.svg)](https://www.npmjs.com/package/projex-legacy-cli)
 
 ## Installation
 
 ```bash
 # Install globally
-npm install -g projex-cli
+npm install -g projex-legacy-cli
 
 # Or use npx
-npx projex-cli setup
+npx projex-legacy-cli setup
 ```
 
 ## Quick Start
 
 ```bash
 # 1. Run the setup wizard
-projex setup
+projex-legacy setup
 
 # 2. Scan your GitHub for projects
-projex scan
+projex-legacy scan
 
 # 3. Review pending portfolio drafts
-projex drafts
+projex-legacy drafts
 
 # 4. Approve and inject into your portfolio
-projex approve github:username/repo-name
+projex-legacy approve github:username/repo-name
 ```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `projex setup` | Interactive setup wizard |
-| `projex scan` | Scan GitHub for projects |
-| `projex list` | List all detected projects |
-| `projex drafts` | Show pending portfolio drafts |
-| `projex approve <id>` | Approve draft and inject into portfolio |
-| `projex export` | Export approved entries as JSON |
+| `projex-legacy setup` | Interactive setup wizard |
+| `projex-legacy scan` | Scan GitHub for projects |
+| `projex-legacy list` | List all detected projects |
+| `projex-legacy drafts` | Show pending portfolio drafts |
+| `projex-legacy approve <id>` | Approve draft and inject into portfolio |
+| `projex-legacy export` | Export approved entries as JSON |
 
 ## How It Works
 

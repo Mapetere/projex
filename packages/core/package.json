@@ -1,10 +1,10 @@
 {
-    "name": "projex-cli",
+    "name": "projex-legacy-cli",
     "version": "0.5.0",
     "description": "Automatically infer projects from GitHub and generate portfolio entries",
     "type": "module",
     "bin": {
-        "projex": "./dist/cli.js"
+        "projex-legacy": "./dist/cli.js"
     },
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -29,11 +29,11 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/Mapetere/projex.git"
+        "url": "https://github.com/Mapetere/projex-legacy.git"
     },
-    "homepage": "https://github.com/Mapetere/projex#readme",
+    "homepage": "https://github.com/Mapetere/projex-legacy#readme",
     "bugs": {
-        "url": "https://github.com/Mapetere/projex/issues"
+        "url": "https://github.com/Mapetere/projex-legacy/issues"
     },
     "engines": {
         "node": ">=18.0.0"
