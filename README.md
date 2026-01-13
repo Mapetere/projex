@@ -1,5 +1,9 @@
 # Projex Legacy
 
+> ⚠️ **ARCHIVED** — This is the legacy/prototype version of Projex. It served as an exploration phase for automating portfolio updates. The project has been rebuilt from scratch as [Projex v1](https://github.com/Mapetere/projex), which takes a fundamentally different approach as a *project observability probe* rather than a portfolio manager.
+
+---
+
 > Automatically infer projects from GitHub activity and generate portfolio entries.
 
 [![npm version](https://img.shields.io/npm/v/projex-legacy-cli.svg)](https://www.npmjs.com/package/projex-legacy-cli)
