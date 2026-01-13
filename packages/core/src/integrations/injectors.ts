@@ -223,6 +223,7 @@ export class HTMLInjector extends BaseInjector {
     private findMatchingClosingTag(content: string, startPos: number, tagName: string): number {
         let depth = 1;
         let pos = startPos;
+        // Match opening tags - we filter out self-closing tags in the loop below
         const openPattern = new RegExp(`<${tagName}[^>]*>`, 'gi');
         const closePattern = new RegExp(`</${tagName}>`, 'gi');
 
@@ -241,8 +242,12 @@ export class HTMLInjector extends BaseInjector {
             const closePos = closeMatch.index;
 
             if (openPos < closePos) {
-                depth++;
-                pos = openPos + openMatch![0].length;
+                // Check if this is a self-closing tag (e.g., <div /> or <div/>)
+                const matchedTag = openMatch![0];
+                if (!matchedTag.includes('/>')) {
+                    depth++;
+                }
+                pos = openPos + matchedTag.length;
             } else {
                 depth--;
                 if (depth === 0) {
