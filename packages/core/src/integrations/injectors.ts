@@ -4,7 +4,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { dirname, join, extname } from 'path';
+import { dirname, join } from 'path';
 import { execSync } from 'child_process';
 import type { PortfolioAnalysis } from './analyzer.js';
 import type { GeneratedCard } from './template-generator.js';
